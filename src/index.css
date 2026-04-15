@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-dark: #080808;
+  --color-bg-surface: #121212;
+  --color-border-theme: #222222;
+  --color-text-primary: #E0E0E0;
+  --color-text-secondary: #707070;
+  --color-accent-nvidia: #76B900;
+  --color-accent-alert: #FF3B30;
+  
+  --font-mono: 'Courier New', Courier, monospace;
+  --font-sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-dark text-text-primary font-sans antialiased overflow-hidden;
+    width: 100vw;
+    height: 100vh;
+  }
+}
+
+@layer components {
+  .technical-grid {
+    @apply grid gap-px bg-border-theme border border-border-theme;
+  }
+  
+  .data-cell {
+    @apply bg-bg-surface p-4 transition-colors duration-200;
+  }
+  
+  .data-cell:hover {
+    @apply bg-white/5;
+  }
+  
+  .micro-label {
+    @apply text-[10px] uppercase tracking-widest text-text-secondary font-mono;
+  }
+  
+  .value-display {
+    @apply font-mono font-bold text-2xl;
+  }
+}
+
