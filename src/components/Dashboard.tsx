@@ -244,7 +244,7 @@ export default function Dashboard() {
                     <BarChart3 className="w-8 h-8 text-blue-500" />
                     <div>
                       <h2 className="text-xl font-bold tracking-tighter uppercase">Hardware Capacity Report</h2>
-                      <p className="text-[10px] font-mono text-text-secondary">DUAL RTX 4090 | 96GB VRAM | 512GB RAM</p>
+                      <p className="text-[10px] font-mono text-text-secondary">DUAL RTX 4090 | 96GB VRAM | 3 FPS SAMPLING</p>
                     </div>
                   </div>
                   <div className="text-right">

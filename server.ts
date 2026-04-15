@@ -54,16 +54,16 @@ async function startServer() {
   });
 
   app.post("/api/benchmark", (req, res) => {
-    // Simulate capacity calculation
+    // Simulate capacity calculation for 3 FPS sampling
     setTimeout(() => {
       res.json({
-        maxStreams: 120,
-        bottleneck: "NVDEC_DECODE_LIMIT",
-        recommendation: "Switch to H.265 or upgrade to H100 for higher decode density.",
+        maxStreams: 500,
+        bottleneck: "CPU_NETWORK_IO_LIMIT",
+        recommendation: "Increase CPU core count or use multiple network interfaces to handle 500+ concurrent RTSP connections.",
         details: {
-          vramLimit: 800,
-          nvdecLimit: 120,
-          inferenceLimit: 500
+          vramLimit: 960,
+          nvdecLimit: 666,
+          inferenceLimit: 555
         }
       });
     }, 2000);
