@@ -1,8 +1,7 @@
-version: '3.8'
-
 services:
   vision-stream:
     build: .
+    image: vision-stream-x100:latest
     container_name: vision-stream-x100
     ports:
       - "3000:3000"
