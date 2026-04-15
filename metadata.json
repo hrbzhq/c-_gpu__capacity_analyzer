@@ -1,6 +1,6 @@
 {
   "name": "Remix: VisionStream X100",
-  "description": "High-performance C++/CUDA/TensorRT video processing system for 100+ streams on dual RTX 6000 Ada / 48GB GPUs (96GB Total VRAM).",
+  "description": "High-performance C++/CUDA/TensorRT video processing system for 100+ streams on dual RTX 4090 GPUs (96GB Total VRAM as per user spec).",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

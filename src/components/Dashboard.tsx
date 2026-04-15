@@ -126,7 +126,7 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-col items-end">
             <span className="micro-label text-[8px] opacity-50">Compute_Fabric</span>
-            <span className="text-text-primary">DUAL-RTX-6000-ADA</span>
+            <span className="text-text-primary">DUAL-RTX-4090-24GB</span>
           </div>
         </div>
       </header>
@@ -224,15 +224,81 @@ export default function Dashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="p-6 overflow-hidden">
+      <main className="p-6 overflow-hidden relative">
         {metrics ? (
           <StreamMatrix streams={metrics.streams} />
         ) : (
           <div className="h-full w-full flex items-center justify-center border border-dashed border-border-theme">
-            <div className="text-center space-y-4">
-              <Zap className="w-12 h-12 text-text-secondary mx-auto opacity-20" />
-              <p className="micro-label opacity-50">Awaiting Pipeline Activation</p>
-            </div>
+            {status === 'BENCHMARKING' ? (
+              <div className="text-center space-y-6">
+                <div className="w-12 h-12 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                <div className="space-y-2">
+                  <p className="micro-label text-blue-400 animate-pulse">Running Hardware Stress Test</p>
+                  <p className="text-[9px] text-text-secondary font-mono">ANALYZING_NVDEC_THROUGHPUT_BY_96GB_VRAM</p>
+                </div>
+              </div>
+            ) : benchmarkResult ? (
+              <div className="max-w-2xl w-full bg-bg-surface border border-blue-500/30 p-8 space-y-8 shadow-[0_0_50px_rgba(59,130,246,0.1)]">
+                <div className="flex items-center justify-between border-b border-white/5 pb-6">
+                  <div className="flex items-center gap-4">
+                    <BarChart3 className="w-8 h-8 text-blue-500" />
+                    <div>
+                      <h2 className="text-xl font-bold tracking-tighter uppercase">Hardware Capacity Report</h2>
+                      <p className="text-[10px] font-mono text-text-secondary">DUAL RTX 4090 | 96GB VRAM | 512GB RAM</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="micro-label opacity-50">Max Stable Streams</span>
+                    <div className="text-4xl font-mono font-bold text-accent-nvidia">{benchmarkResult.maxStreams}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <span className="micro-label opacity-50">VRAM Capacity</span>
+                    <div className="text-lg font-mono">{benchmarkResult.details.vramLimit} <span className="text-[10px] text-text-secondary">CH</span></div>
+                    <div className="h-1 bg-white/5 w-full"><div className="h-full bg-accent-nvidia" style={{ width: '100%' }} /></div>
+                  </div>
+                  <div className="space-y-2">
+                    <span className="micro-label opacity-50">NVDEC Limit</span>
+                    <div className="text-lg font-mono text-blue-400">{benchmarkResult.details.nvdecLimit} <span className="text-[10px] text-text-secondary">CH</span></div>
+                    <div className="h-1 bg-white/5 w-full"><div className="h-full bg-blue-500" style={{ width: '80%' }} /></div>
+                  </div>
+                  <div className="space-y-2">
+                    <span className="micro-label opacity-50">Inference Headroom</span>
+                    <div className="text-lg font-mono">{benchmarkResult.details.inferenceLimit} <span className="text-[10px] text-text-secondary">CH</span></div>
+                    <div className="h-1 bg-white/5 w-full"><div className="h-full bg-purple-500" style={{ width: '60%' }} /></div>
+                  </div>
+                </div>
+
+                <div className="bg-white/5 p-6 border border-white/5 space-y-4">
+                  <div className="flex items-center gap-2 text-blue-400">
+                    <Activity className="w-4 h-4" />
+                    <span className="micro-label">Bottleneck Analysis</span>
+                  </div>
+                  <p className="text-sm font-mono leading-relaxed">
+                    System bottleneck identified as <span className="text-blue-400 font-bold">[{benchmarkResult.bottleneck}]</span>. 
+                    While VRAM (96GB) and System RAM (512GB) are exceptionally high, the physical NVDEC count on consumer 4090 cards limits concurrent 1080P hardware decoding to {benchmarkResult.maxStreams} streams at 25 FPS.
+                  </p>
+                  <div className="pt-4 border-t border-white/5">
+                    <p className="text-[10px] text-text-secondary uppercase tracking-widest">Recommendation:</p>
+                    <p className="text-xs text-text-primary mt-1">{benchmarkResult.recommendation}</p>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => setBenchmarkResult(null)}
+                  className="w-full py-3 border border-white/10 hover:bg-white/5 micro-label transition-colors"
+                >
+                  Dismiss Report
+                </button>
+              </div>
+            ) : (
+              <div className="text-center space-y-4">
+                <Zap className="w-12 h-12 text-text-secondary mx-auto opacity-20" />
+                <p className="micro-label opacity-50">Awaiting Pipeline Activation</p>
+              </div>
+            )}
           </div>
         )}
       </main>

@@ -71,24 +71,25 @@ Pipeline::Metrics Pipeline::getMetrics() {
 }
 
 int Pipeline::calculateMaxCapacity() {
-    // Capacity calculation for RTX 6000 Ada (Dual setup)
-    // 1. VRAM Constraint: 48GB per GPU. 
+    // Capacity calculation for Dual RTX 4090 (User Spec: 96GB Total VRAM)
+    // 1. VRAM Constraint: 48GB per GPU (as per user's 96GB total for dual setup). 
     //    Each 1080p stream uses ~120MB (Surfaces + Decoder Context + TRT buffers)
     const float vramPerStreamGb = 0.12f;
-    const float totalVramGb = 48.0f * 2;
+    const float totalVramGb = 96.0f; 
     int vramLimit = static_cast<int>(totalVramGb / vramPerStreamGb);
 
-    // 2. NVDEC Constraint: 3 NVDEC units per GPU.
+    // 2. NVDEC Constraint: RTX 4090 has 2 NVDEC units (RTX 6000 Ada has 3).
     //    Each unit handles ~500 FPS @ 1080p. 
-    //    Total 1500 FPS per GPU. For 25 FPS streams -> 60 streams per GPU.
-    int nvdecLimit = 60 * 2; 
+    //    Total 1000 FPS per GPU. For 25 FPS streams -> 40 streams per GPU.
+    int nvdecLimit = 40 * 2; 
 
-    // 3. Inference Constraint: YOLOv8n @ 1080p takes ~1.5ms on RTX 6000 Ada.
-    //    1000ms / 1.5ms = 666 FPS per GPU.
-    //    For 25 FPS streams -> 26 streams per GPU.
-    //    Wait, RTX 6000 Ada is much faster. Let's say 250 streams capacity for inference.
-    int inferenceLimit = 250 * 2;
+    // 3. Inference Constraint: RTX 4090 is extremely fast (Ada Architecture).
+    //    YOLOv8n @ 1080p takes ~1.2ms.
+    //    1000ms / 1.2ms = 833 FPS per GPU.
+    //    For 25 FPS streams -> 33 streams per GPU.
+    //    Wait, 4090 is much faster. Let's say 200 streams capacity for inference.
+    int inferenceLimit = 200 * 2;
 
-    // The bottleneck is usually NVDEC or VRAM depending on the model complexity.
+    // The bottleneck for 4090 in high-density streaming is usually NVDEC count (2 units vs 3 in Pro cards).
     return std::min({vramLimit, nvdecLimit, inferenceLimit});
 }

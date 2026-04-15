@@ -24,7 +24,7 @@ async function startServer() {
       gpus: [
         {
           id: 0,
-          model: "RTX 6000 Ada",
+          model: "RTX 4090",
           utilization: 72 + Math.random() * 10,
           vramUsed: 18.2 + Math.random() * 1,
           vramTotal: 48,
@@ -33,7 +33,7 @@ async function startServer() {
         },
         {
           id: 1,
-          model: "RTX 6000 Ada",
+          model: "RTX 4090",
           utilization: 68 + Math.random() * 10,
           vramUsed: 17.5 + Math.random() * 1,
           vramTotal: 48,
