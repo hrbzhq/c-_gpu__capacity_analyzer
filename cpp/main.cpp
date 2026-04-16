@@ -2,22 +2,44 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <vector>
+#include <string>
 
 int main() {
     std::cout << "Starting VisionStream X100 High-Performance Video System..." << std::endl;
-    std::cout << "Target: 100 Streams | Dual RTX 4090 | Ubuntu 24.04" << std::endl;
+    std::cout << "Features: 4-Model TensorRT Array | HTTP Camera API | Dual RTX 4090" << std::endl;
 
     try {
-        // Initialize pipeline with 100 streams
-        Pipeline pipeline(100);
+        // Define 4 TensorRT engine model paths (model array)
+        std::vector<std::string> enginePaths = {
+            "c-_gpu__capacity_analyzer-main/yolo_models/20251027_205844.engine",
+            "c-_gpu__capacity_analyzer-main/yolo_models/20251104_172108.engine",
+            "c-_gpu__capacity_analyzer-main/yolo_models/20251113_160034.engine",
+            "c-_gpu__capacity_analyzer-main/yolo_models/s20251204_162540.engine"
+        };
+
+        // Camera API URL
+        const std::string cameraApiUrl = "http://192.168.8.191:9061/api/cameras/list";
+
+        // Initialize pipeline with 4-model array
+        Pipeline pipeline(enginePaths, cameraApiUrl);
+
+        // Fetch camera URLs from HTTP API
+        std::cout << "Fetching camera URLs from: " << cameraApiUrl << std::endl;
+        if (!pipeline.fetchCameraUrls()) {
+            std::cerr << "Failed to fetch camera URLs from API. Exiting." << std::endl;
+            return 1;
+        }
+
+        std::cout << "Loaded " << pipeline.getNumStreams() << " streams. Starting pipeline..." << std::endl;
         pipeline.start();
 
         // Main monitoring loop
         while (true) {
             auto metrics = pipeline.getMetrics();
             
-            printf("\r[SYSTEM] Total FPS: %.2f | Avg Latency: %.2fms | GPU0: %.1f%% | GPU1: %.1f%%", 
-                   metrics.totalFps, metrics.avgLatencyMs, 
+            printf("\r[SYSTEM] Streams: %d | Total FPS: %.2f | Avg Latency: %.2fms | GPU0: %.1f%% | GPU1: %.1f%%", 
+                   pipeline.getNumStreams(), metrics.totalFps, metrics.avgLatencyMs, 
                    metrics.gpuUtilization[0], metrics.gpuUtilization[1]);
             fflush(stdout);
 

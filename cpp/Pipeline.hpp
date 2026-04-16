@@ -5,15 +5,21 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <string>
 
 /**
- * @brief Orchestrates 100 video streams across dual GPUs
+ * @brief Orchestrates video streams across dual GPUs with 4-model TensorRT array
  */
 class Pipeline {
 public:
-    Pipeline(int numStreams = 100);
+    // Constructor takes vector of engine paths (4 models for array)
+    Pipeline(const std::vector<std::string>& enginePaths, 
+             const std::string& cameraApiUrl = "http://192.168.8.191:9061/api/cameras/list");
     ~Pipeline();
 
+    // Fetch camera URLs from HTTP API
+    bool fetchCameraUrls();
+    
     void start();
     void stop();
 
@@ -28,15 +34,21 @@ public:
 
     // Calculate maximum stable streams based on current hardware
     int calculateMaxCapacity();
+    
+    // Get number of streams (cameras)
+    int getNumStreams() const { return numStreams; }
 
 private:
     int numStreams;
+    std::string cameraApiUrl;
+    std::vector<std::string> cameraUrls;
+    std::vector<std::string> enginePaths;
     std::atomic<bool> running{false};
     std::vector<std::unique_ptr<std::thread>> workerThreads;
 
-    // 50 streams per GPU for dual 4090 setup
+    // 4-model array for multi-model inference
     std::vector<std::unique_ptr<GpuDecoder>> decoders;
-    std::unique_ptr<TrtInference> inferenceEngines[2];
+    std::vector<std::unique_ptr<TrtInference>> inferenceEngines;
 
-    void streamWorker(int streamId, int gpuId);
+    void streamWorker(int streamId, int gpuId, int engineIdx);
 };

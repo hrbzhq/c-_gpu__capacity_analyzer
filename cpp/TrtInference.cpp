@@ -13,9 +13,10 @@ TrtInference::TrtInference(int gpuId, const std::string& enginePath)
     : gpuId(gpuId), enginePath(enginePath) {}
 
 TrtInference::~TrtInference() {
-    if (context) context->destroy();
-    if (engine) engine->destroy();
-    if (runtime) runtime->destroy();
+    if (context) delete context;
+    if (engine) delete engine;
+    if (runtime) delete runtime;
+    if (stream) cudaStreamDestroy(stream);
 }
 
 bool TrtInference::loadEngine() {
@@ -45,8 +46,8 @@ bool TrtInference::loadEngine() {
 
 bool TrtInference::buildEngineFromOnnx(const std::string& onnxPath, int maxBatchSize) {
     auto builder = nvinfer1::createInferBuilder(gLogger);
-    const auto explicitBatch = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    auto network = builder->createNetworkV2(explicitBatch);
+    // TensorRT 10: Explicit batch is now the default, kEXPLICIT_BATCH is deprecated
+    auto network = builder->createNetworkV2(0);
     auto config = builder->createBuilderConfig();
     auto parser = nvonnxparser::createParser(*network, gLogger);
 
@@ -55,7 +56,7 @@ bool TrtInference::buildEngineFromOnnx(const std::string& onnxPath, int maxBatch
         return false;
     }
 
-    config->setMaxWorkspaceSize(1ULL << 30); // 1GB
+    config->setMemoryPoolLimit(nvinfer1::MemoryPoolType::kWORKSPACE, 1ULL << 30); // 1GB
     if (builder->platformHasFastFp16()) {
         config->setFlag(nvinfer1::BuilderFlag::kFP16);
     }
@@ -64,24 +65,36 @@ bool TrtInference::buildEngineFromOnnx(const std::string& onnxPath, int maxBatch
     std::ofstream engineFile(enginePath, std::ios::binary);
     engineFile.write((char*)plan->data(), plan->size());
     
-    plan->destroy();
-    config->destroy();
-    network->destroy();
-    builder->destroy();
+    delete plan;
+    delete config;
+    delete network;
+    delete builder;
+    delete parser;
     
     return true;
 }
 
 bool TrtInference::doInference(void* d_input, float* h_output, int batchSize) {
-    // 1. Pre-processing (Resize/Normalize) usually done via CUDA Kernels
-    // 2. Set bindings
-    void* bindings[2] = { d_input, nullptr }; // Simplified
+    if (!d_input || !context) {
+        return false;
+    }
     
-    // 3. Enqueue inference
-    context->enqueueV2(bindings, stream, nullptr);
+    // 1. Pre-processing (Resize/Normalize) usually done via CUDA Kernels
+    
+    // 2. Set tensor addresses for enqueueV3 (TensorRT 10.x API)
+    // Get tensor names and set addresses
+    const char* inputName = engine->getIOTensorName(0);
+    const char* outputName = engine->getIOTensorName(1);
+    
+    context->setTensorAddress(inputName, d_input);
+    // For output, we would need a GPU buffer. Using nullptr for now.
+    context->setTensorAddress(outputName, nullptr);
+    
+    // 3. Enqueue inference using enqueueV3 (TensorRT 10.x)
+    bool status = context->enqueueV3(stream);
     
     // 4. Async copy back to host or keep in GPU for further processing
     // cudaMemcpyAsync(h_output, d_output, ...);
     
-    return true;
+    return status;
 }

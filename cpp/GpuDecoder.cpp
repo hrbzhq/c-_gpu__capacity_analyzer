@@ -1,13 +1,15 @@
 #include "GpuDecoder.hpp"
 #include <iostream>
+#include <cuda_runtime.h>
 
 GpuDecoder::GpuDecoder(int gpuId, const std::string& rtspUrl) 
-    : gpuId(gpuId), url(rtspUrl) {}
+    : gpuId(gpuId), url(rtspUrl), d_frameBuffer(nullptr), frameBufferSize(0) {}
 
 GpuDecoder::~GpuDecoder() {
     // Cleanup NVDEC resources
     if (hDecoder) cuvidDestroyDecoder(hDecoder);
     if (cuContext) cuCtxDestroy(cuContext);
+    if (d_frameBuffer) cudaFree(d_frameBuffer);
 }
 
 bool GpuDecoder::initialize() {
@@ -44,10 +46,22 @@ bool GpuDecoder::grabFrame(void** d_framePtr, size_t& pitch) {
     // 2. Passing packets to cuvidParseVideoData
     // 3. Handling callbacks to decode and map surfaces
     
-    // Mock implementation for structure:
-    // cuvidDecodePicture(hDecoder, ...);
-    // CUVIDPROCPARAMS params = {};
-    // cuvidMapVideoFrame(hDecoder, index, (unsigned long long*)d_framePtr, (unsigned int*)&pitch, &params);
+    // For now: allocate dummy GPU buffer for testing (1920x1080 NV12 = ~3MB)
+    size_t requiredSize = 1920 * 1080 * 3 / 2; // NV12 format
+    
+    if (!d_frameBuffer) {
+        cudaError_t err = cudaMalloc(&d_frameBuffer, requiredSize);
+        if (err != cudaSuccess) {
+            std::cerr << "Failed to allocate GPU memory for frame buffer" << std::endl;
+            return false;
+        }
+        frameBufferSize = requiredSize;
+        // Initialize with zeros
+        cudaMemset(d_frameBuffer, 0, requiredSize);
+    }
+    
+    *d_framePtr = d_frameBuffer;
+    pitch = 1920; // row pitch
     
     return true; 
 }

@@ -6,12 +6,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find Dependencies
 find_package(CUDA REQUIRED)
-include_directories(${CUDA_INCLUDE_DIRS})
+find_package(CURL REQUIRED)
+find_package(PkgConfig REQUIRED)
 
-# TensorRT
-set(TENSORRT_ROOT "/usr/lib/x86_64-linux-gnu") # Default Ubuntu path
-include_directories(${TENSORRT_ROOT}/include)
-link_directories(${TENSORRT_ROOT}/lib)
+include_directories(${CUDA_INCLUDE_DIRS})
+include_directories(${CURL_INCLUDE_DIRS})
+
+# TensorRT Search
+include_directories(/usr/include/x86_64-linux-gnu)
+include_directories(/usr/local/cuda/include)
+link_directories(/usr/lib/x86_64-linux-gnu)
+link_directories(/usr/local/cuda/lib64)
 
 # Source Files
 add_executable(vision_stream_x100 
@@ -24,9 +29,14 @@ add_executable(vision_stream_x100
 # Link Libraries
 target_link_libraries(vision_stream_x100 
     PRIVATE 
-    ${CUDA_LIBRARIES} 
-    nvinfer 
-    nvcuvid 
+    ${CUDA_LIBRARIES}
+    ${CURL_LIBRARIES}
+    nvinfer
+    nvonnxparser
+    nvcuvid
+    cuda
+    cudart
+    dl
     pthread
 )
 

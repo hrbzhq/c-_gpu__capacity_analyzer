@@ -37,5 +37,6 @@ private:
     CUcontext cuContext = nullptr;
 
     // Internal buffer management
-    void* d_decodedBuffer = nullptr;
+    void* d_frameBuffer = nullptr;
+    size_t frameBufferSize = 0;   
 };

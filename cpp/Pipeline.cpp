@@ -1,17 +1,101 @@
 #include "Pipeline.hpp"
 #include <iostream>
 #include <chrono>
+#include <algorithm>
+#include <curl/curl.h>
+#include <sstream>
 
-Pipeline::Pipeline(int numStreams) : numStreams(numStreams) {
-    // Initialize inference engines for both GPUs
-    inferenceEngines[0] = std::make_unique<TrtInference>(0, "model_gpu0.engine");
-    inferenceEngines[1] = std::make_unique<TrtInference>(1, "model_gpu1.engine");
+// CURL write callback for HTTP response
+static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* userp) {
+    userp->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
+
+// Simple JSON parser to extract URL values (assumes {"url": "rtsp://..."} format)
+static std::vector<std::string> parseCameraUrls(const std::string& json) {
+    std::vector<std::string> urls;
+    size_t pos = 0;
     
-    // Initialize 100 decoders (50 per GPU)
-    for (int i = 0; i < numStreams; ++i) {
-        int gpuId = (i < 50) ? 0 : 1;
-        decoders.push_back(std::make_unique<GpuDecoder>(gpuId, "rtsp://stream_" + std::to_string(i)));
+    // Look for "url": patterns in JSON
+    while ((pos = json.find("\"url\"", pos)) != std::string::npos) {
+        // Find the value after "url":
+        pos = json.find(":", pos);
+        if (pos == std::string::npos) break;
+        
+        // Find opening quote
+        pos = json.find("\"", pos + 1);
+        if (pos == std::string::npos) break;
+        
+        size_t endPos = json.find("\"", pos + 1);
+        if (endPos == std::string::npos) break;
+        
+        std::string url = json.substr(pos + 1, endPos - pos - 1);
+        if (url.find("rtsp://") == 0) {
+            urls.push_back(url);
+        }
+        pos = endPos + 1;
     }
+    
+    return urls;
+}
+
+Pipeline::Pipeline(const std::vector<std::string>& enginePaths, 
+                   const std::string& cameraApiUrl) 
+    : numStreams(0), cameraApiUrl(cameraApiUrl), enginePaths(enginePaths) {
+    
+    // Initialize 4 inference engines (model array)
+    // GPU 0 gets engines 0,1; GPU 1 gets engines 2,3
+    for (size_t i = 0; i < enginePaths.size() && i < 4; ++i) {
+        int gpuId = (i < 2) ? 0 : 1;
+        inferenceEngines.push_back(std::make_unique<TrtInference>(gpuId, enginePaths[i]));
+        std::cout << "Loaded engine " << i << " on GPU " << gpuId << ": " << enginePaths[i] << std::endl;
+    }
+}
+
+bool Pipeline::fetchCameraUrls() {
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        std::cerr << "Failed to initialize CURL" << std::endl;
+        return false;
+    }
+    
+    std::string response;
+    
+    curl_easy_setopt(curl, CURLOPT_URL, cameraApiUrl.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    
+    CURLcode res = curl_easy_perform(curl);
+    
+    if (res != CURLE_OK) {
+        std::cerr << "HTTP request failed: " << curl_easy_strerror(res) << std::endl;
+        curl_easy_cleanup(curl);
+        return false;
+    }
+    
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_easy_cleanup(curl);
+    
+    if (httpCode != 200) {
+        std::cerr << "HTTP error code: " << httpCode << std::endl;
+        return false;
+    }
+    
+    cameraUrls = parseCameraUrls(response);
+    numStreams = cameraUrls.size();
+    
+    std::cout << "Fetched " << numStreams << " camera URLs from API" << std::endl;
+    
+    // Initialize decoders for each camera URL
+    for (int i = 0; i < numStreams; ++i) {
+        int gpuId = (i < numStreams / 2) ? 0 : 1;
+        decoders.push_back(std::make_unique<GpuDecoder>(gpuId, cameraUrls[i]));
+    }
+    
+    return !cameraUrls.empty();
 }
 
 Pipeline::~Pipeline() {
@@ -19,10 +103,17 @@ Pipeline::~Pipeline() {
 }
 
 void Pipeline::start() {
+    if (cameraUrls.empty()) {
+        std::cerr << "No camera URLs available. Call fetchCameraUrls() first." << std::endl;
+        return;
+    }
+    
     running = true;
     for (int i = 0; i < numStreams; ++i) {
-        int gpuId = (i < 50) ? 0 : 1;
-        workerThreads.push_back(std::make_unique<std::thread>(&Pipeline::streamWorker, this, i, gpuId));
+        int gpuId = (i < numStreams / 2) ? 0 : 1;
+        // Round-robin assign engine: GPU 0 uses engines 0,1; GPU 1 uses engines 2,3
+        int engineIdx = (i % 2) + (gpuId * 2);
+        workerThreads.push_back(std::make_unique<std::thread>(&Pipeline::streamWorker, this, i, gpuId, engineIdx));
     }
 }
 
@@ -34,11 +125,19 @@ void Pipeline::stop() {
     workerThreads.clear();
 }
 
-void Pipeline::streamWorker(int streamId, int gpuId) {
+void Pipeline::streamWorker(int streamId, int gpuId, int engineIdx) {
     auto& decoder = decoders[streamId];
-    auto& engine = inferenceEngines[gpuId];
+    // Use provided engineIdx or calculate from stream ID
+    int actualEngineIdx = engineIdx;
+    if (actualEngineIdx >= static_cast<int>(inferenceEngines.size())) {
+        actualEngineIdx = 0;
+    }
+    auto& engine = inferenceEngines[actualEngineIdx];
 
-    if (!decoder->initialize()) return;
+    if (!decoder->initialize()) {
+        std::cerr << "Failed to initialize decoder for stream " << streamId << std::endl;
+        return;
+    }
 
     while (running) {
         void* d_frame = nullptr;
@@ -47,7 +146,7 @@ void Pipeline::streamWorker(int streamId, int gpuId) {
         // 1. Hardware-accelerated Grab (NVDEC)
         if (decoder->grabFrame(&d_frame, pitch)) {
             
-            // 2. TensorRT Inference (Zero-copy)
+            // 2. TensorRT Inference using 4-model array
             float output[1000]; // Example output buffer
             engine->doInference(d_frame, output, 1);
             
@@ -55,8 +154,8 @@ void Pipeline::streamWorker(int streamId, int gpuId) {
             // ...
         }
 
-        // Throttle to target FPS if necessary
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // Throttle to target FPS if necessary (40ms = 25 FPS target)
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
     }
 }
 
@@ -96,5 +195,8 @@ int Pipeline::calculateMaxCapacity() {
     int cpuLimit = 500; 
 
     // With 3 FPS sampling, the bottleneck shifts from NVDEC to Inference/CPU.
-    return std::min({vramLimit, nvdecLimit, inferenceLimit, cpuLimit});
+    int minVal = std::min(vramLimit, nvdecLimit);
+    minVal = std::min(minVal, inferenceLimit);
+    minVal = std::min(minVal, cpuLimit);
+    return minVal;
 }
