@@ -8,11 +8,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(CUDA REQUIRED)
 find_package(CURL REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(OpenCV REQUIRED)
 
 include_directories(${CUDA_INCLUDE_DIRS})
 include_directories(${CURL_INCLUDE_DIRS})
+include_directories(${OpenCV_INCLUDE_DIRS})
 
-# TensorRT Search
+# TensorRT & nvJPEG Search
 include_directories(/usr/include/x86_64-linux-gnu)
 include_directories(/usr/local/cuda/include)
 link_directories(/usr/lib/x86_64-linux-gnu)
@@ -31,9 +33,11 @@ target_link_libraries(vision_stream_x100
     PRIVATE 
     ${CUDA_LIBRARIES}
     ${CURL_LIBRARIES}
+    ${OpenCV_LIBS}
     nvinfer
     nvonnxparser
     nvcuvid
+    nvjpeg
     cuda
     cudart
     dl
